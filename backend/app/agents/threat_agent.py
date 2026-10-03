@@ -2,7 +2,7 @@ import time
 import logging
 from typing import Dict, Any, List
 from app.services.mitre_service import mitre_service
-from app.services.groq_service import groq_service
+from app.services.ai_service import ai_service
 
 logger = logging.getLogger("sec_hindsight.agent.threat")
 
@@ -10,6 +10,7 @@ class ThreatAnalysisAgent:
     """
     Threat Analysis Agent: Maps incident evidence to official MITRE ATT&CK techniques
     and clearly distinguishes factual evidence from analytical inferences.
+    Uses unified AI Service (Groq / Gemini) for threat synthesis.
     """
     async def run(
         self,
@@ -36,15 +37,18 @@ class ThreatAnalysisAgent:
             facts.append("Factual: Elevated permission request issued (sudo / admin privileges).")
 
         if "privilege" in desc_lower:
-            inferences.append("Inference: Adversary is attempting post-exploitation administrative control.")
+            inferences.append("Inference: Evidence is consistent with potential post-exploitation administrative access attempt.")
             inferences.append("Inference: Initial authentication tokens may have been harvested via phishing or credential reuse.")
         else:
             inferences.append("Inference: User may be traveling or logging in from a newly issued personal device.")
 
-        # 3. LLM Threat Synthesis via Groq
+        # 3. LLM Threat Synthesis via AI Service
         system_prompt = (
             "You are an expert Cybersecurity Threat Analysis AI Agent. "
-            "Map incident indicators to verified MITRE ATT&CK techniques and clearly separate evidence from inference."
+            "Map incident indicators to verified MITRE ATT&CK techniques and clearly separate evidence from inference. "
+            "IMPORTANT RULES:\n"
+            "1. Never state 'This proves an attack'. Use cautious language like 'Evidence is consistent with...', 'Possible threat context...'.\n"
+            "2. Do not invent non-standard MITRE ATT&CK techniques. Explain why matched techniques apply based on structured security knowledge."
         )
 
         user_prompt = f"""
@@ -91,7 +95,7 @@ Provide a JSON object with this schema:
             "inferences": inferences or ["Potential unauthorized credential usage detected."]
         }
 
-        output = await groq_service.generate_json(
+        output = await ai_service.generate_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             fallback_response=fallback

@@ -1,7 +1,7 @@
 import time
 import logging
 from typing import Dict, Any, List
-from app.services.groq_service import groq_service
+from app.services.ai_service import ai_service
 
 logger = logging.getLogger("sec_hindsight.agent.response")
 
@@ -10,6 +10,7 @@ class ResponseAgent:
     Response Agent: Generates targeted defensive response action recommendations.
     Provides clear risk evaluations, operational impact warnings, and mandates
     human analyst approval before any defensive simulation executes.
+    Uses unified AI Service (Groq / Gemini).
     """
     async def run(
         self,
@@ -26,7 +27,9 @@ class ResponseAgent:
 
         system_prompt = (
             "You are an expert SOC Response AI Agent in a defensive copilot system. "
-            "Formulate safe defensive response action recommendations requiring analyst approval."
+            "Formulate safe defensive response action recommendations requiring analyst approval. "
+            "IMPORTANT: All actions are advisory recommendations requiring explicit human approval. "
+            "Never claim destructive actions have been autonomously executed."
         )
 
         user_prompt = f"""
@@ -97,7 +100,7 @@ Provide a JSON object with this schema:
             "urgency": "IMMEDIATE" if severity in ["high", "critical"] else "STANDARD"
         }
 
-        output = await groq_service.generate_json(
+        output = await ai_service.generate_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             fallback_response=fallback

@@ -73,13 +73,13 @@ Retrieves relevant prior organizational experiences when a new incident arrives.
 ### Reflect
 Synthesizes retrieved organizational experiences alongside current alert context to reason about the active investigation. Hindsight Reflection compares historical false-positive ratios against confirmed compromises and highlights critical "delta indicators" (e.g., presence of privilege escalation) that analysts should examine.
 
-> **Key Distinction:** Hindsight operates strictly as the **Memory Layer** (storing, indexing, recalling, and reflecting on historical organizational knowledge), while **LLMs (Groq)** and specialized **AI Agents** perform the dynamic reasoning, evidence extraction, threat mapping, and recommendation generation.
+> **Key Distinction:** Hindsight operates strictly as the **Memory Layer** (storing, indexing, recalling, and reflecting on historical organizational knowledge), while **AI Reasoning Providers (Groq & Google Gemini)** perform dynamic reasoning over the supplied context, evidence extraction, threat mapping, and recommendation generation.
 
 ---
 
 ## Architecture
 
-SecHindsight is built on a modern, decoupled architecture connecting frontend interfaces, backend orchestration, AI inference, and persistent memory services.
+SecHindsight is built on a modern, decoupled architecture connecting frontend interfaces, backend orchestration, AI inference providers, and persistent memory services.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -97,13 +97,13 @@ SecHindsight is built on a modern, decoupled architecture connecting frontend in
 │       ┌────────────────────────────┼────────────────────────────┐       │
 │       │                            │                            │       │
 │ ┌─────▼───────┐             ┌──────▼────────┐           ┌───────▼─────┐ │
-│ │  Groq LLM   │             │   Hindsight   │           │    MITRE    │ │
-│ │ API Engine  │             │ Memory Cloud  │           │  ATT&CK DB  │ │
-│ └─────────────┘             └───────────────┘           └─────────────┘ │
-│                                    │                            │       │
-│ ┌──────────────────────────────────▼────────────────────────────▼─────┐ │
-│ │              Defensive Simulator & Human-in-the-Loop              │ │
-│ └──────────────────────────────────┬──────────────────────────────────┘ │
+│ │ AI Service  │             │   Hindsight   │           │    MITRE    │ │
+│ │ Router      │             │ Memory Cloud  │           │  ATT&CK DB  │ │
+│ │ ├─ Groq     │             └───────────────┘           └─────────────┘ │
+│ │ └─ Gemini   │                    │                            │       │
+│ └─────────────┘ ┌──────────────────▼────────────────────────────▼─────┐ │
+│                 │              Defensive Simulator & Human-in-the-Loop  │ │
+│                 └──────────────────┬──────────────────────────────────┘ │
 └────────────────────────────────────┼────────────────────────────────────┘
                                      │
 ┌────────────────────────────────────▼────────────────────────────────────┐
@@ -114,11 +114,12 @@ SecHindsight is built on a modern, decoupled architecture connecting frontend in
 
 - **Frontend:** Next.js (React / TypeScript) for real-time SOC monitoring, investigation visualizer, and memory management.
 - **Backend:** FastAPI (Python) providing REST APIs, agent orchestration, and simulation services.
-- **AI Reasoning:** Groq API powering fast multi-agent reasoning models.
+- **AI Reasoning Providers:** Unified AI Service router supporting **Groq** and **Google Gemini** (via official `google-genai` SDK).
 - **Memory Layer:** Hindsight Cloud API (`sechindsight` bank) for Retain, Recall, and Reflect operations.
 - **Database:** Supabase PostgreSQL (with asynchronous local SQLite engine fallback).
 - **Threat Knowledge:** MITRE ATT&CK framework mapping for TTP classification.
-- **Defensive Response:** Response Simulator engine coupled with mandatory human analyst approval.
+- **Defensive Response:** Safe Response Simulator engine coupled with mandatory human analyst approval.
+
 
 ---
 
@@ -345,7 +346,10 @@ Configure environment variables in `backend/.env` (refer to `backend/.env.exampl
 
 ### Backend Environment Variables
 - `GROQ_API_KEY`: API key for Groq LLM service (backend-only).
-- `GROQ_MODEL`: Model identifier for Groq (e.g., `openai/gpt-oss-120b` or `llama-3.3-70b-versatile`).
+- `GROQ_MODEL`: Model identifier for Groq (e.g., `openai/gpt-oss-120b`).
+- `GEMINI_API_KEY`: API key for Google Gemini AI service (backend-only).
+- `GEMINI_MODEL`: Model identifier for Gemini (default: `gemini-2.5-flash`).
+- `AI_PROVIDER`: Selected AI reasoning provider (`groq` or `gemini`, default: `groq`).
 - `HINDSIGHT_API_KEY`: API key for Hindsight Cloud API (backend-only).
 - `HINDSIGHT_BASE_URL`: Base URL for Hindsight Cloud API (`https://api.hindsight.vectorize.io`).
 - `HINDSIGHT_BANK_ID`: Target memory bank identifier (default: `sechindsight`).
@@ -360,13 +364,16 @@ Configure environment variables in `backend/.env` (refer to `backend/.env.exampl
 ### Frontend Environment Variables
 - `NEXT_PUBLIC_API_URL`: Backend API URL (default: `http://localhost:8000/api/v1`).
 
-> **Security Reminder:** Never commit real secrets, API keys, or database credentials to version control.
+> **Security Reminder:** Never commit real secrets, API keys, or database credentials to version control. All AI provider keys remain strictly server-side.
 
 ---
 
 ## API Endpoints
 
 SecHindsight provides REST API endpoints under `/api/v1`:
+
+### AI Provider Status
+- `GET /api/v1/ai/provider`: Returns active AI reasoning provider (`groq` or `gemini`), model, configuration status, and supported providers.
 
 ### Incidents
 - `GET /api/v1/incidents`: List incidents with optional filters (`status`, `severity`, `category`).
@@ -377,6 +384,7 @@ SecHindsight provides REST API endpoints under `/api/v1`:
 - `POST /api/v1/incidents/{incident_id}/reject`: Submit analyst rejection for proposed response actions.
 
 ### Hindsight Memory
+
 - `GET /api/v1/memories`: Query or list retained memories (supports semantic/keyword search via `?query=`).
 - `POST /api/v1/memories/retain`: Retain incident outcomes, decisions, and lessons learned into Hindsight.
 

@@ -1,9 +1,70 @@
+# ==============================
+# Environment / Secrets
+# ==============================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.local.example
+
+# ==============================
+# Node.js
+# ==============================
 node_modules/
-backend/venv/
-backend/__pycache__/
-backend/*.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================
+# Next.js
+# ==============================
 frontend/.next/
 frontend/out/
+frontend/.vercel/
+
+# ==============================
+# Python
+# ==============================
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.py[cod]
+
+# ==============================
+# Python tooling
+# ==============================
+.pytest_cache/
+.mypy_cache/
+
+# ==============================
+# Local databases
+# ==============================
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# ==============================
+# Build / distribution
+# ==============================
+dist/
+build/
+
+# ==============================
+# Logs
+# ==============================
+*.log
+
+# ==============================
+# IDE
+# ==============================
+.vscode/
+.idea/
+
+# ==============================
+# OS
+# ==============================
+.DS_Store
+Thumbs.db
+# TypeScript build cache
+*.tsbuildinfo

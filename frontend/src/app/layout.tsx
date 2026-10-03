@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Navbar } from "@/components/Navbar";
-import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "SecHindsight — A Cybersecurity SOC Copilot That Learns From Every Incident",
-  description: "Memory-powered cybersecurity incident response and defensive copilot system.",
+  description: "Enterprise memory-powered cybersecurity incident response and defensive copilot platform.",
 };
 
 export default function RootLayout({
@@ -14,16 +13,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased selection:bg-[#B7C396]/30 selection:text-[#1D211C]">
-        <div className="atmosphere-bg" />
-        <Navbar />
-        <div className="flex max-w-[1600px] mx-auto min-h-[calc(100vh-57px)]">
-          <Sidebar />
-          <main className="flex-1 p-6 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+    <html lang="en" className="dark">
+      <body className="antialiased bg-[#080616] text-[#E2E8F0]">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

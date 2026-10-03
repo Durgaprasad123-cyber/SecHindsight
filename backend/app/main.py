@@ -12,7 +12,8 @@ from app.api.v1 import (
     responses,
     analytics,
     health,
-    seed
+    seed,
+    ai
 )
 
 logging.basicConfig(
@@ -57,6 +58,8 @@ app.include_router(responses.router, prefix=settings.API_V1_STR)
 app.include_router(analytics.router, prefix=settings.API_V1_STR)
 app.include_router(health.router, prefix=settings.API_V1_STR)
 app.include_router(seed.router, prefix=settings.API_V1_STR)
+app.include_router(ai.router, prefix=settings.API_V1_STR)
+
 
 @app.get("/")
 async def root():

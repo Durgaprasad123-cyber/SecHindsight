@@ -1,70 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #F5F6F1;
-  --bg-surface: #FFFFFF;
-  --bg-glass: rgba(255, 255, 255, 0.70);
-  --soft-green: #E0E7D7;
-  --primary-green: #B7C396;
-  --deep-green: #8A9A65;
-  --muted-rose: #BA9A91;
-  --light-gray: #EDECEC;
-  --border-subtle: rgba(40, 50, 35, 0.10);
-  --text-dark: #1D211C;
-  --text-secondary: #62685E;
-  --dark-utility: #283029;
+  /* Official SecHindsight SOC Charcoal Palette */
+  --brand-primary: #0F722A;
+  --brand-primary-hover: #0B561F;
+  --brand-secondary: #10B981;
+  --brand-black: #121212;
+
+  /* Surfaces derived from #121212 */
+  --bg-app: #121212;
+  --bg-surface: #1A1A1A;
+  --bg-surface-raised: #242424;
+  --bg-surface-hover: #2A2A2A;
+
+  /* Neutral System */
+  --color-white: #FFFFFF;
+  --color-near-white: #F4F5F9;
+  --color-slate-100: #E2E8F0;
+  --color-slate-300: #CBD5E1;
+  --color-slate-400: #94A3B8;
+  --color-slate-500: #64748B;
+  --color-slate-700: #334155;
+  
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.14);
+  --border-brand: rgba(15, 114, 42, 0.35);
+
+  /* Functional Status Colors */
+  --status-critical: #EF4444;
+  --status-high: #F97316;
+  --status-medium: #EAB308;
+  --status-low: #3B82F6;
+  --status-success: #10B981;
+  --status-info: #06B6D4;
+  --status-teal: #14B8A6;
 }
 
 body {
-  background-color: #F5F6F1;
-  color: #1D211C;
+  background-color: var(--bg-app);
+  color: #FFFFFF;
   font-family: var(--font-sans), 'Inter', 'Geist', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   min-height: 100vh;
 }
 
-/* Sorbet Glassmorphism primitives */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(18px) saturate(120%);
-  -webkit-backdrop-filter: blur(18px) saturate(120%);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 10px 32px rgba(35, 45, 30, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  border-radius: 14px;
+/* Enterprise SOC Panel System */
+.soc-card {
+  background-color: #1A1A1A;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
-.glass-panel-hover {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+.soc-card-hover {
+  transition: all 0.18s ease-in-out;
 }
 
-.glass-panel-hover:hover {
-  background: rgba(255, 255, 255, 0.90);
-  border-color: rgba(183, 195, 150, 0.5);
-  box-shadow: 0 14px 40px rgba(138, 154, 101, 0.12), inset 0 1px 0 rgba(255, 255, 255, 1);
-  transform: translateY(-2px);
+.soc-card-hover:hover {
+  border-color: rgba(15, 114, 42, 0.45);
+  background-color: #222222;
 }
 
-.glass-pill {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(40, 50, 35, 0.10);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+.soc-card-raised {
+  background-color: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
 }
 
-/* Subtle Layered Atmospheric Background */
-.atmosphere-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: 
-    radial-gradient(circle at 12% 10%, rgba(224, 231, 215, 0.65) 0%, transparent 45%),
-    radial-gradient(circle at 88% 15%, rgba(186, 154, 145, 0.20) 0%, transparent 40%),
-    radial-gradient(circle at 50% 85%, rgba(183, 195, 150, 0.25) 0%, transparent 50%);
-  filter: blur(30px);
+.soc-header-glass {
+  background-color: rgba(18, 18, 18, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Custom Clean Scrollbar */
@@ -73,20 +81,17 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(245, 246, 241, 0.8);
+  background: #121212;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(183, 195, 150, 0.6);
-  border-radius: 9999px;
+  background: rgba(15, 114, 42, 0.4);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(138, 154, 101, 0.8);
+  background: rgba(15, 114, 42, 0.7);
 }
 
-/* Custom utilities */
-.text-dark { color: #1D211C; }
-.text-secondary { color: #62685E; }
-.bg-sorbet-soft { background-color: #E0E7D7; }
-.bg-sorbet-primary { background-color: #B7C396; }
-.bg-sorbet-deep { background-color: #8A9A65; }
-.border-sorbet { border-color: rgba(40, 50, 35, 0.10); }
+/* Monospace text utility */
+.font-mono-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

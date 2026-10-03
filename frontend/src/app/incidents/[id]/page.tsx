@@ -12,15 +12,14 @@ import {
   XCircle, 
   ArrowLeft, 
   Activity, 
-  Lock, 
   Cpu, 
-  FileText,
-  Clock,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
-  Radio,
-  Server
+  RefreshCw,
+  Clock,
+  Server,
+  Layers,
+  Check,
+  Database
 } from "lucide-react";
 import { 
   fetchIncidentDetail, 
@@ -28,20 +27,41 @@ import {
   approveResponse, 
   rejectResponse 
 } from "@/lib/api";
+import { IncidentDetailResponse } from "@/lib/types";
+import { StatusBadge, SeverityBadge, ConfidenceBar } from "@/components/ui/StatusBadge";
+import { LoadingSkeleton, ErrorState } from "@/components/ui/StateViews";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
+
+const WORKFLOW_STAGES = [
+  { id: "NEW", label: "01 NEW ALERT" },
+  { id: "TRIAGING", label: "02 TRIAGE" },
+  { id: "INVESTIGATING", label: "03 RECALL & REFLECT" },
+  { id: "THREAT_ANALYSIS", label: "04 THREAT MATRIX" },
+  { id: "RESPONSE_RECOMMENDED", label: "05 RESPONSE STRATEGY" },
+  { id: "AWAITING_APPROVAL", label: "06 HUMAN DECISION" },
+  { id: "CONTAINED", label: "07 SIMULATED CONTAINMENT" },
+];
 
 export default function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<IncidentDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [isInvestigating, setIsInvestigating] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedActionId, setSelectedActionId] = useState<string | undefined>(undefined);
 
   const loadDetail = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetchIncidentDetail(id);
       setData(res);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setError(e?.message || `Incident ${id} not found.`);
     } finally {
       setLoading(false);
     }
@@ -56,114 +76,122 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     try {
       await triggerInvestigation(id);
       await loadDetail();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error executing investigation pipeline.");
+      alert(e?.message || "Error executing investigation pipeline.");
     } finally {
       setIsInvestigating(false);
     }
   };
 
-  const handleApprove = async (actionId?: string) => {
+  const handleApproveConfirm = async () => {
     setIsApproving(true);
     try {
-      await approveResponse(id, { action_id: actionId });
+      await approveResponse(id, { action_id: selectedActionId });
+      setShowConfirmModal(false);
       await loadDetail();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error approving response.");
+      alert(e?.message || "Error approving response action.");
     } finally {
       setIsApproving(false);
     }
   };
 
   const handleReject = async () => {
+    if (!confirm("Are you sure you want to reject the recommended response action?")) return;
     try {
-      await rejectResponse(id);
+      await rejectResponse(id, "Analyst rejected recommended action.");
       await loadDetail();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
     }
   };
 
   if (loading) {
+    return <LoadingSkeleton message={`Loading Incident ${id} telemetry & agent state...`} />;
+  }
+
+  if (error || !data || !data.incident) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <Activity className="w-8 h-8 text-[#8A9A65] animate-spin" />
-        <p className="text-xs font-mono text-[#62685E]">Loading Incident Telemetry & Agent State...</p>
-      </div>
+      <ErrorState
+        title={`Incident ${id} Unavailable`}
+        description={error || "Incident record not found in backend."}
+        onRetry={loadDetail}
+      />
     );
   }
 
-  if (!data || !data.incident) {
-    return (
-      <div className="glass-panel p-8 rounded-2xl text-center space-y-4 bg-white/80">
-        <AlertTriangle className="w-12 h-12 text-amber-600 mx-auto" />
-        <h2 className="text-xl font-bold text-[#1D211C]">Incident Not Found</h2>
-        <Link href="/incidents" className="text-xs text-[#8A9A65] underline font-semibold">Return to Incidents Queue</Link>
-      </div>
-    );
-  }
+  const { incident, evidence, agent_runs, responses } = data;
 
-  const { incident, evidence, agent_runs, responses, decisions } = data;
-
-  const triageRun = agent_runs?.find((r: any) => r.agent_name === "triage");
+  const triageRun = agent_runs?.find((r) => r.agent_name === "triage");
   const triageOut = triageRun?.output_json;
 
-  const invRun = agent_runs?.find((r: any) => r.agent_name === "investigation");
+  const invRun = agent_runs?.find((r) => r.agent_name === "investigation");
   const invOut = invRun?.output_json?.investigation;
   const recalledMemories = invRun?.output_json?.recalled_memories || [];
 
-  const threatRun = agent_runs?.find((r: any) => r.agent_name === "threat");
+  const threatRun = agent_runs?.find((r) => r.agent_name === "threat");
   const threatOut = threatRun?.output_json;
 
-  const respRun = agent_runs?.find((r: any) => r.agent_name === "response");
+  const respRun = agent_runs?.find((r) => r.agent_name === "response");
   const respOut = respRun?.output_json;
 
-  const pendingAction = responses?.find((r: any) => r.status === "PENDING_APPROVAL") || respOut?.recommended_actions?.[0];
-  const executedAction = responses?.find((r: any) => r.status === "EXECUTED");
-  const isContained = incident.status === "CONTAINED" || executedAction;
+  const pendingAction = responses?.find((r) => r.status === "PENDING_APPROVAL") || respOut?.recommended_actions?.[0];
+  const executedAction = responses?.find((r) => r.status === "EXECUTED");
+  const isContained = incident.status === "CONTAINED" || !!executedAction;
+
+  // Determine active workflow step index
+  const getCurrentStepIndex = () => {
+    if (isContained) return 6;
+    if (incident.status === "AWAITING_APPROVAL") return 5;
+    if (incident.status === "RESPONSE_RECOMMENDED") return 4;
+    if (incident.status === "THREAT_ANALYSIS") return 3;
+    if (incident.status === "INVESTIGATING") return 2;
+    if (incident.status === "TRIAGING") return 1;
+    return 0;
+  };
+
+  const activeStepIdx = getCurrentStepIndex();
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-12">
+    <div className="space-y-6 max-w-[1700px] mx-auto pb-12">
       
-      {/* Back link & Header */}
+      {/* Back Link & Header Bar */}
       <div className="flex items-center justify-between">
-        <Link href="/incidents" className="text-xs text-[#62685E] hover:text-[#1D211C] flex items-center gap-1.5 font-medium transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5 text-[#8A9A65]" /> Back to Incident Queue
+        <Link
+          href="/incidents"
+          className="text-xs font-mono text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 text-[#10B981]" /> Back to Incidents Queue
         </Link>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[#62685E] font-mono">Status:</span>
-          <span className={`px-3 py-1 rounded-md text-xs font-mono font-bold uppercase tracking-wider ${
-            isContained ? "bg-emerald-100 text-emerald-800 border border-emerald-300" :
-            incident.status === "AWAITING_APPROVAL" ? "bg-amber-100 text-amber-900 border border-amber-300" :
-            "bg-[#E0E7D7] text-[#1D211C] border border-[#B7C396]"
-          }`}>
-            {incident.status}
-          </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadDetail}
+            className="p-1.5 rounded bg-[#242424] text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer"
+            title="Refresh Incident State"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-[#10B981]" />
+          </button>
+          <StatusBadge status={incident.status} size="md" />
         </div>
       </div>
 
-      {/* Hero Incident Header Panel */}
-      <div className="glass-panel p-6 rounded-2xl border-[rgba(40,50,35,0.10)] space-y-4 bg-white/80">
+      {/* Incident Hero Card */}
+      <div className="soc-card p-6 border-slate-800 bg-[#1A1A1A] space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-[#8A9A65] font-bold text-sm">{incident.id}</span>
-              <span className={`px-2.5 py-0.5 rounded font-semibold uppercase ${
-                incident.severity === "critical" ? "bg-rose-100 text-rose-800" :
-                incident.severity === "high" ? "bg-amber-100 text-amber-900" :
-                "bg-blue-100 text-blue-900"
-              }`}>
-                {incident.severity} Severity
-              </span>
-              <span className="px-2.5 py-0.5 rounded bg-[#E0E7D7] text-[#1D211C]">
-                Confidence: {Math.round(incident.confidence * 100)}%
-              </span>
+            <div className="flex items-center gap-2.5 font-mono text-xs">
+              <span className="font-bold text-[#10B981] text-base">{incident.id}</span>
+              <SeverityBadge severity={incident.severity} size="md" />
+              <div className="flex items-center gap-1.5 bg-[#242424] px-2.5 py-0.5 rounded border border-slate-800">
+                <span className="text-slate-400 text-[10px]">CONFIDENCE:</span>
+                <ConfidenceBar confidence={incident.confidence} />
+              </div>
             </div>
 
-            <h1 className="text-xl md:text-2xl font-bold text-[#1D211C] tracking-tight">
+            <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
               {incident.title}
             </h1>
           </div>
@@ -172,202 +200,273 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
             <button
               onClick={handleRunInvestigation}
               disabled={isInvestigating}
-              className="px-4 py-2.5 rounded-xl bg-[#8A9A65] text-white font-bold text-xs shadow-xs hover:bg-[#788855] transition-all flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
+              className="px-4 py-2.5 rounded bg-[#0F722A] hover:bg-[#0B561F] text-white font-mono font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50 border border-[#0F722A]"
             >
               {isInvestigating ? (
                 <Activity className="w-4 h-4 animate-spin text-white" />
               ) : (
-                <Cpu className="w-4 h-4 text-white fill-white" />
+                <Cpu className="w-4 h-4 text-white" />
               )}
-              <span>{isInvestigating ? "Running AI Agents..." : "Run Multi-Agent Investigation"}</span>
+              <span>{isInvestigating ? "Running Agent Pipeline..." : "Run Multi-Agent Investigation"}</span>
             </button>
           )}
         </div>
 
-        {/* Technical Telemetry Metadata */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[rgba(40,50,35,0.08)] text-xs font-mono">
-          <div className="bg-white/90 p-2.5 rounded-xl border border-[rgba(40,50,35,0.08)]">
-            <span className="text-[#62685E] text-[10px] block uppercase">Target Host:</span>
-            <span className="text-[#1D211C] font-bold">{incident.source_host || "N/A"}</span>
+        {/* Telemetry Entity Metadata Table */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800 font-mono text-xs">
+          <div className="bg-[#242424] p-2.5 rounded border border-slate-800">
+            <span className="text-slate-500 text-[10px] block uppercase">TARGET HOST</span>
+            <span className="text-slate-100 font-bold">{incident.source_host || "WORKSTATION-042"}</span>
           </div>
-          <div className="bg-white/90 p-2.5 rounded-xl border border-[rgba(40,50,35,0.08)]">
-            <span className="text-[#62685E] text-[10px] block uppercase">User Account:</span>
-            <span className="text-[#1D211C] font-bold">{incident.user_account || "N/A"}</span>
+          <div className="bg-[#242424] p-2.5 rounded border border-slate-800">
+            <span className="text-slate-500 text-[10px] block uppercase">USER ACCOUNT</span>
+            <span className="text-slate-100 font-bold">{incident.user_account || "jdoe"}</span>
           </div>
-          <div className="bg-white/90 p-2.5 rounded-xl border border-[rgba(40,50,35,0.08)]">
-            <span className="text-[#62685E] text-[10px] block uppercase">IP Address:</span>
-            <span className="text-[#1D211C] font-bold">{incident.ip_address || "N/A"}</span>
+          <div className="bg-[#242424] p-2.5 rounded border border-slate-800">
+            <span className="text-slate-500 text-[10px] block uppercase">SOURCE IP</span>
+            <span className="text-slate-100 font-bold">{incident.ip_address || "192.168.1.105"}</span>
           </div>
-          <div className="bg-white/90 p-2.5 rounded-xl border border-[rgba(40,50,35,0.08)]">
-            <span className="text-[#62685E] text-[10px] block uppercase">Endpoint State:</span>
-            <span className={`font-bold ${isContained ? "text-rose-700" : "text-emerald-700"}`}>
+          <div className="bg-[#242424] p-2.5 rounded border border-slate-800">
+            <span className="text-slate-500 text-[10px] block uppercase">ENDPOINT STATE</span>
+            <span className={`font-bold ${isContained ? "text-red-400" : "text-emerald-400"}`}>
               {isContained ? "ISOLATED" : "ONLINE"}
             </span>
           </div>
         </div>
 
-        <p className="text-xs text-[#1D211C] leading-relaxed bg-white/50 p-3 rounded-xl border border-[rgba(40,50,35,0.08)]">
+        <p className="text-xs text-slate-300 leading-relaxed bg-[#242424] p-3 rounded border border-slate-800 font-mono">
           {incident.description}
         </p>
       </div>
 
-      {/* 2-Column Main Workspace */}
+      {/* Investigation Workflow Progress Stepper */}
+      <div className="soc-card p-4 border-slate-800 bg-[#1A1A1A]">
+        <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#10B981] mb-3">
+          Multi-Agent Investigation Workflow Pipeline State:
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {WORKFLOW_STAGES.map((s, idx) => {
+            const isDone = activeStepIdx > idx;
+            const isCurrent = activeStepIdx === idx;
+
+            return (
+              <div
+                key={s.id}
+                className={`p-2 rounded border text-[11px] font-mono transition-all ${
+                  isCurrent
+                    ? "bg-[#0F722A]/20 text-white border-[#0F722A] font-bold"
+                    : isDone
+                    ? "bg-[#242424] text-emerald-400 border-emerald-500/30"
+                    : "bg-[#121212] text-slate-500 border-slate-800"
+                }`}
+              >
+                <div className="flex items-center gap-1 mb-0.5">
+                  {isDone ? (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  ) : isCurrent ? (
+                    <Activity className="w-3 h-3 text-[#10B981] animate-spin" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                  )}
+                  <span className="text-[10px] truncate">{s.label}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Grid: Left (Investigation, Recall & MITRE) vs Right (Defensive Actions & Approval) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        {/* Left Column (8 cols): Triage, Hindsight Recall, MITRE */}
+        {/* Left Column (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
 
-          {/* 1. TRIAGE AGENT OUTPUT */}
+          {/* 1. TRIAGE AGENT FINDINGS */}
           {triageOut && (
-            <div className="glass-panel p-5 rounded-2xl border-[rgba(40,50,35,0.10)] space-y-3 bg-white/80">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-[#1D211C] flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-[#8A9A65]" /> Triage Agent Findings
+            <div className="soc-card p-5 border-slate-800 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 className="text-xs font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-[#10B981]" /> Triage Agent Output
                 </h3>
-                <span className="text-[11px] font-mono text-[#62685E]">{triageRun?.execution_time_ms}ms</span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {triageRun?.execution_time_ms ? `${triageRun.execution_time_ms} ms` : "Completed"}
+                </span>
               </div>
-              <p className="text-xs text-[#1D211C] leading-relaxed">
+              <p className="text-xs text-slate-200 leading-relaxed font-mono bg-[#242424] p-3 rounded border border-slate-800">
                 {triageOut.reasoning || triageOut.initial_assessment}
               </p>
             </div>
           )}
 
           {/* 2. HINDSIGHT ORGANIZATIONAL MEMORY RECALL PANEL */}
-          <div className="glass-panel p-5 rounded-2xl border-[rgba(40,50,35,0.12)] space-y-4 bg-white/80">
-            <div className="flex items-center justify-between border-b border-[rgba(40,50,35,0.08)] pb-3">
+          <div className="soc-card p-5 border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-base font-bold text-[#1D211C] flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-[#8A9A65]" /> Hindsight Organizational Memory Recall
+                <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                  <Brain className="w-4.5 h-4.5 text-[#10B981]" /> HINDSIGHT ORGANIZATIONAL MEMORY RECALL
                 </h3>
-                <p className="text-xs text-[#62685E]">Recalled experiences from Hindsight bank <span className="font-mono text-[#1D211C]">sechindsight</span></p>
+                <p className="text-xs text-slate-400">Recalled experiences from memory bank <span className="font-mono text-slate-200">sechindsight</span></p>
               </div>
-              <span className="px-2.5 py-1 rounded bg-[#E0E7D7] text-[#1D211C] text-xs font-mono font-bold">
+              <span className="px-2.5 py-1 rounded bg-[#0F722A]/20 text-[#10B981] text-xs font-mono font-bold border border-[#0F722A]/40">
                 {recalledMemories.length} Memories Recalled
               </span>
             </div>
 
             {recalledMemories.length === 0 ? (
-              <div className="p-6 text-center text-[#62685E] text-xs bg-white/50 rounded-xl border border-dashed border-[rgba(40,50,35,0.12)] font-mono">
+              <div className="p-6 text-center text-slate-500 text-xs font-mono bg-[#242424] rounded border border-dashed border-slate-800">
                 Click "Run Multi-Agent Investigation" above to recall Hindsight memories.
               </div>
             ) : (
               <div className="space-y-3">
                 {recalledMemories.map((mem: any, idx: number) => (
-                  <div key={idx} className="p-4 rounded-xl bg-white border border-[rgba(40,50,35,0.10)] space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between border-b border-[rgba(40,50,35,0.06)] pb-1.5">
-                      <span className="font-mono text-xs font-bold text-[#1D211C]">Source: {mem.incident_id}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#E0E7D7] text-[#1D211C]">
+                  <div key={idx} className="p-4 rounded bg-[#242424] border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 font-mono text-xs">
+                      <span className="font-bold text-[#10B981]">Source: {mem.incident_id}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400">
                         {mem.outcome}
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#62685E]">
-                      <strong>Past Evidence:</strong> {mem.evidence_summary}
+                    <p className="text-xs text-slate-300 font-mono">
+                      <strong>Historical Evidence:</strong> {mem.evidence_summary}
                     </p>
                     
-                    <div className="p-2.5 rounded-lg bg-[#E0E7D7]/40 text-xs text-[#1D211C]">
-                      <strong className="font-semibold">Lesson Learned:</strong> "{mem.lesson_learned}"
+                    <div className="p-2.5 rounded bg-[#121212] text-xs text-slate-200 font-mono border border-slate-800">
+                      <strong className="text-teal-400">Lesson Learned:</strong> "{mem.lesson_learned}"
                     </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {/* AI MEMORY INFLUENCE REASONING */}
-            {invOut && (
-              <div className="p-4 rounded-xl bg-[#E0E7D7]/40 border border-[#B7C396]/60 space-y-2">
-                <div className="flex items-center gap-2 text-[#1D211C] font-bold text-xs font-mono uppercase">
-                  <Sparkles className="w-4 h-4 text-[#8A9A65]" /> Analytical Memory Influence Summary:
-                </div>
-                <p className="text-xs text-[#1D211C] leading-relaxed">
-                  {invOut.memory_influence_summary || "Hindsight memory recalled past corporate VPN incidents. The copilot identified that while login alone is benign, privilege escalation strongly correlates with confirmed compromise."}
-                </p>
-              </div>
-            )}
           </div>
 
-          {/* 3. MITRE ATT&CK THREAT MATRIX */}
+          {/* 3. MEMORY INFLUENCE & REFLECTION PANEL ("WHY DID SECHINDSIGHT RECOMMEND THIS?") */}
+          {invOut && (
+            <div className="soc-card p-5 border-slate-800 space-y-4">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                  <Sparkles className="w-4.5 h-4.5 text-[#10B981]" /> WHY DID SECHINDSIGHT RECOMMEND THIS?
+                </h3>
+                <p className="text-xs text-slate-400">Analytical delta between current alert & recalled organizational memories</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+                <div className="p-3.5 rounded bg-[#242424] border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">CURRENT EVIDENCE</span>
+                  <p className="text-slate-200">{incident.description}</p>
+                </div>
+                <div className="p-3.5 rounded bg-[#242424] border border-slate-800 space-y-1">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">HISTORICAL PATTERN</span>
+                  <p className="text-slate-200">{invOut.reflection_summary || "Prior benign VPN logins lacked privilege escalation attempts."}</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded bg-[#0F722A]/15 border border-[#0F722A]/40 font-mono text-xs space-y-1">
+                <div className="font-bold text-[#10B981] uppercase text-[10px]">CRITICAL DELTA IDENTIFIED:</div>
+                <p className="text-slate-200 leading-relaxed">
+                  Unlike previous false-positive VPN alerts, current incident combines unrecognized hardware ID <span className="font-bold text-red-400 font-mono">UNK-DEV-9921</span> with immediate privilege escalation command (<span className="font-bold text-red-400 font-mono">sudo su - root</span>).
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 4. MITRE ATT&CK THREAT MAPPING */}
           {threatOut && (
-            <div className="glass-panel p-5 rounded-2xl border-[rgba(40,50,35,0.12)] space-y-4 bg-white/80">
-              <h3 className="text-base font-bold text-[#1D211C] flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-rose-700" /> MITRE ATT&CK Threat Mapping
+            <div className="soc-card p-5 border-slate-800 space-y-4">
+              <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                <ShieldCheck className="w-4.5 h-4.5 text-red-400" /> MITRE ATT&CK Threat Mapping
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
                 {(threatOut.mitre_techniques || []).map((tech: any, idx: number) => (
-                  <div key={idx} className="p-3.5 rounded-xl bg-white border border-[rgba(40,50,35,0.10)] space-y-1 shadow-xs">
+                  <div key={idx} className="p-3.5 rounded bg-[#242424] border border-slate-800 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-rose-800">{tech.id}</span>
-                      <span className="text-[10px] font-mono text-[#62685E] bg-gray-100 px-2 py-0.5 rounded">{tech.tactic}</span>
+                      <span className="font-bold text-red-400">{tech.id}</span>
+                      <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{tech.tactic}</span>
                     </div>
-                    <div className="text-xs font-semibold text-[#1D211C]">{tech.name}</div>
-                    <p className="text-[11px] text-[#62685E] leading-snug">{tech.reasoning}</p>
+                    <div className="font-bold text-slate-100">{tech.name}</div>
+                    <p className="text-[11px] text-slate-400 leading-snug">{tech.reasoning}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* 5. PRIMARY TELEMETRY EVIDENCE LOGS */}
+          <div className="soc-card p-5 border-slate-800 space-y-3 font-mono text-xs">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Primary Evidence Items ({evidence.length}):</h3>
+            <div className="space-y-2">
+              {evidence.map((ev) => (
+                <div key={ev.id} className="p-3 rounded bg-[#242424] border border-slate-800 flex items-center justify-between">
+                  <span className="font-bold text-[#10B981]">{ev.evidence_type}</span>
+                  <span className="text-slate-300 font-sans">{ev.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
-        {/* Right Column (4 cols): Response Recommendation & Human Controls */}
+        {/* Right Column (4 cols): Defensive Response & Human Approval */}
         <div className="lg:col-span-4 space-y-6">
 
-          <div className="glass-panel p-5 rounded-2xl border-[rgba(40,50,35,0.12)] space-y-4 bg-white/80 sticky top-20">
-            <div className="border-b border-[rgba(40,50,35,0.08)] pb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold text-[#1D211C] flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-600" /> Defensive Response
+          <div className="soc-card p-5 border-slate-800 space-y-4 sticky top-20">
+            <div className="border-b border-slate-800 pb-3 flex items-center justify-between font-mono">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Zap className="w-4.5 h-4.5 text-amber-400" /> DEFENSIVE RESPONSE
               </h3>
-              <span className="text-[10px] font-mono text-[#62685E] uppercase">Human Approval</span>
+              <span className="text-[10px] text-amber-400 uppercase font-bold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                HUMAN APPROVAL
+              </span>
             </div>
 
             {isContained ? (
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-center space-y-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                <div className="text-sm font-bold text-emerald-900">INCIDENT CONTAINED</div>
-                <p className="text-xs text-emerald-800">
-                  Defensive isolation executed on host <span className="font-mono font-bold">{incident.source_host || "WORKSTATION-042"}</span>. Outcome retained in Hindsight.
+              <div className="p-4 rounded bg-emerald-500/10 border border-emerald-500/30 text-center space-y-2 font-mono">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                <div className="text-sm font-bold text-emerald-300">INCIDENT CONTAINED</div>
+                <p className="text-xs text-slate-300">
+                  Defensive isolation executed on target <span className="font-bold text-white">{incident.source_host || "WORKSTATION-042"}</span>. Outcome retained in Hindsight.
                 </p>
               </div>
             ) : pendingAction ? (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-white border border-[rgba(40,50,35,0.10)] space-y-2">
-                  <div className="flex items-center justify-between font-mono">
-                    <span className="font-bold text-[#1D211C]">{pendingAction.action_type || "ISOLATE_ENDPOINT"}</span>
-                    <span className="text-rose-700 text-[10px] font-bold">RISK: {pendingAction.risk_level || "MEDIUM"}</span>
+              <div className="space-y-4 font-mono text-xs">
+                <div className="p-3.5 rounded bg-[#242424] border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100">{pendingAction.action_type || "ISOLATE_ENDPOINT"}</span>
+                    <span className="text-red-400 text-[10px] font-bold">RISK: {pendingAction.risk_level || "MEDIUM"}</span>
                   </div>
-                  <div className="text-xs text-[#1D211C]">
-                    Target: <strong className="font-mono">{pendingAction.target || incident.source_host}</strong>
+                  <div className="text-slate-300">
+                    Target: <strong className="text-white">{pendingAction.target || incident.source_host}</strong>
                   </div>
-                  <p className="text-xs text-[#62685E] leading-snug">
-                    {pendingAction.reason || "Isolate target endpoint from corporate network to contain elevated privilege escalation."}
+                  <p className="text-slate-400 text-[11px] leading-snug">
+                    {pendingAction.reason || "Isolate target endpoint to contain root privilege escalation."}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <button
-                    onClick={() => handleApprove(pendingAction.id)}
+                    onClick={() => {
+                      setSelectedActionId(pendingAction.id);
+                      setShowConfirmModal(true);
+                    }}
                     disabled={isApproving}
-                    className="w-full py-3 rounded-xl bg-[#8A9A65] text-white font-bold text-xs shadow-xs hover:bg-[#788855] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-3 rounded bg-[#0F722A] hover:bg-[#0B561F] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border border-[#0F722A]"
                   >
-                    {isApproving ? (
-                      <Activity className="w-4 h-4 animate-spin text-white" />
-                    ) : (
-                      <CheckCircle2 className="w-4 h-4 text-white" />
-                    )}
-                    <span>{isApproving ? "Executing Response Simulation..." : "APPROVE DEFENSIVE RESPONSE"}</span>
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                    <span>APPROVE DEFENSIVE RESPONSE</span>
                   </button>
 
                   <button
                     onClick={handleReject}
-                    className="w-full py-2 rounded-xl bg-white text-[#62685E] hover:text-rose-700 border border-[rgba(40,50,35,0.12)] text-xs font-semibold transition-colors cursor-pointer"
+                    className="w-full py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     Reject Recommendation
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="p-6 text-center text-[#62685E] text-xs font-mono bg-white/50 rounded-xl border border-dashed border-[rgba(40,50,35,0.12)]">
+              <div className="p-6 text-center text-slate-500 text-xs font-mono bg-[#242424] rounded border border-dashed border-slate-800">
                 Run investigation pipeline to generate response recommendations.
               </div>
             )}
@@ -376,6 +475,17 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
         </div>
 
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleApproveConfirm}
+        title="Approve Defensive Response Action"
+        description={`Confirm defensive isolation command '${pendingAction?.action_type || "ISOLATE_ENDPOINT"}' on target '${pendingAction?.target || incident.source_host}'. Action will run in safe simulator mode and retain outcome into Hindsight.`}
+        confirmText="Confirm & Execute Simulation"
+        isLoading={isApproving}
+      />
 
     </div>
   );

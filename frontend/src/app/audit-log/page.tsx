@@ -8,22 +8,31 @@ import {
   RefreshCw, 
   Activity, 
   ShieldCheck,
-  Brain
+  Brain,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { fetchAuditLogs } from "@/lib/api";
+import { AuditLog } from "@/lib/types";
+import { LoadingSkeleton, ErrorState, EmptyState } from "@/components/ui/StateViews";
 
 export default function AuditLogPage() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadLogs = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const data = await fetchAuditLogs();
+      const data = await fetchAuditLogs({ limit: 100 });
       setLogs(data.audit_logs || []);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setError(e?.message || "Failed to load audit logs.");
     } finally {
       setLoading(false);
     }
@@ -35,6 +44,7 @@ export default function AuditLogPage() {
 
   const filteredLogs = logs.filter(
     (l) =>
+      !search.trim() ||
       l.action.toLowerCase().includes(search.toLowerCase()) ||
       l.actor.toLowerCase().includes(search.toLowerCase()) ||
       (l.incident_id && l.incident_id.toLowerCase().includes(search.toLowerCase())) ||
@@ -42,96 +52,126 @@ export default function AuditLogPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-12">
+    <div className="space-y-6 max-w-[1700px] mx-auto pb-12">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-2xl border-[rgba(40,50,35,0.10)] bg-white/80">
+      <div className="soc-card p-6 border-slate-800 bg-[#1A1A1A] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <span className="px-2.5 py-0.5 rounded-md bg-[#E0E7D7] text-[#1D211C] text-xs font-semibold border border-[#B7C396]/40 font-mono">
-            Compliance & Security Audit Trail
-          </span>
-          <h1 className="text-2xl font-bold text-[#1D211C] flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#8A9A65]" /> Immutable Audit Log
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-0.5 rounded bg-[#0F722A]/20 text-[#10B981] text-xs font-mono font-bold border border-[#0F722A]/40 uppercase">
+              Application Audit Log
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-white font-mono flex items-center gap-2">
+            <FileText className="w-6 h-6 text-[#10B981]" /> Operational Application Audit Trail
           </h1>
-          <p className="text-xs text-[#62685E]">
-            Comprehensive ledger of multi-agent operations, Hindsight memory retention events, and human analyst decisions.
+          <p className="text-xs text-slate-400">
+            Append-only record of multi-agent investigation runs, Hindsight memory retentions, and human analyst choices.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-[#62685E] absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search audit logs..."
-              className="w-full bg-white border border-[rgba(40,50,35,0.12)] rounded-xl pl-9 pr-4 py-2 text-xs text-[#1D211C] focus:outline-none focus:border-[#8A9A65] font-mono shadow-xs"
+              className="w-full bg-[#242424] border border-slate-800 rounded pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#0F722A] font-mono"
             />
           </div>
 
           <button
             onClick={loadLogs}
-            className="p-2 rounded-xl bg-white border border-[rgba(40,50,35,0.12)] text-[#62685E] hover:text-[#1D211C] transition-colors cursor-pointer"
+            className="p-2 rounded bg-[#242424] border border-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Refresh Audit Logs"
           >
-            <RefreshCw className={`w-4 h-4 text-[#8A9A65] ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 text-[#10B981] ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      {/* Enterprise Audit Log Table */}
-      <div className="glass-panel p-5 rounded-2xl border-[rgba(40,50,35,0.10)] bg-white/80">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-[rgba(40,50,35,0.10)] text-[#62685E] font-mono uppercase text-[10px]">
-                <th className="py-3 px-3">Timestamp</th>
-                <th className="py-3 px-3">Actor</th>
-                <th className="py-3 px-3">Action</th>
-                <th className="py-3 px-3">Incident</th>
-                <th className="py-3 px-3">Result / Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[rgba(40,50,35,0.06)] font-mono">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#62685E] text-xs">
-                    Loading audit trail...
-                  </td>
+      {/* Audit Log Data Table */}
+      {loading ? (
+        <LoadingSkeleton message="Fetching application audit log ledger..." />
+      ) : error ? (
+        <ErrorState description={error} onRetry={loadLogs} />
+      ) : filteredLogs.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No audit events found"
+          description="No log events match current search query."
+        />
+      ) : (
+        <div className="soc-card p-5 border-slate-800 bg-[#1A1A1A]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 text-[10px] uppercase tracking-wider">
+                  <th className="py-3 px-3">Timestamp</th>
+                  <th className="py-3 px-3">Actor</th>
+                  <th className="py-3 px-3">Action</th>
+                  <th className="py-3 px-3">Incident ID</th>
+                  <th className="py-3 px-3">Details Summary</th>
+                  <th className="py-3 px-3 text-right">Expand</th>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#62685E] text-xs">
-                    No audit records found matching criteria.
-                  </td>
-                </tr>
-              ) : (
-                filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[#E0E7D7]/30 transition-colors">
-                    <td className="py-3 px-3 text-[#62685E] whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3 font-bold text-[#1D211C]">
-                      {log.actor}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#E0E7D7] text-[#1D211C]">
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-bold text-[#8A9A65]">
-                      {log.incident_id || "SYSTEM"}
-                    </td>
-                    <td className="py-3 px-3 text-[#1D211C] font-sans">
-                      {log.details}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {filteredLogs.map((log) => {
+                  const isExpanded = expandedId === log.id;
+
+                  return (
+                    <React.Fragment key={log.id}>
+                      <tr 
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        className="hover:bg-[#242424] transition-colors cursor-pointer"
+                      >
+                        <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
+                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : "N/A"}
+                        </td>
+                        <td className="py-3 px-3 font-bold text-slate-100">
+                          {log.actor}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0F722A]/20 text-[#10B981] border border-[#0F722A]/40">
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-[#10B981]">
+                          {log.incident_id || "SYSTEM"}
+                        </td>
+                        <td className="py-3 px-3 text-slate-300 font-sans max-w-md truncate">
+                          {log.details}
+                        </td>
+                        <td className="py-3 px-3 text-right text-slate-500">
+                          {isExpanded ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr className="bg-[#242424]/70">
+                          <td colSpan={6} className="p-4 border-b border-slate-800">
+                            <div className="space-y-2 font-mono text-xs text-slate-200">
+                              <div className="text-[#10B981] font-bold">Audit Event Log Details (ID: {log.id}):</div>
+                              <p className="p-3 bg-[#121212] rounded border border-slate-800 font-sans leading-relaxed">
+                                {log.details}
+                              </p>
+                              <div className="text-[11px] text-slate-400">
+                                Recorded At: {log.timestamp} | Actor System: {log.actor} | Correlation Incident: {log.incident_id || "N/A"}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   );

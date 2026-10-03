@@ -200,6 +200,32 @@ async def get_incident(
     }
 
 
+@router.get("/{incident_id}/investigation")
+async def get_incident_investigation(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Incident).where(Incident.id == incident_id)
+    res = await db.execute(stmt)
+    inc = res.scalar_one_or_none()
+
+    if not inc:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found.")
+
+    ar_stmt = select(AgentRun).where(
+        AgentRun.incident_id == incident_id,
+        AgentRun.agent_name == "investigation"
+    ).order_by(desc(AgentRun.completed_at))
+    ar_res = await db.execute(ar_stmt)
+    inv_run = ar_res.scalars().first()
+
+    return {
+        "incident_id": incident_id,
+        "investigation": inv_run.output_json if inv_run else None,
+        "status": inv_run.status if inv_run else "NOT_STARTED"
+    }
+
+
 @router.post("/{incident_id}/investigate")
 async def trigger_investigation(
     incident_id: str,

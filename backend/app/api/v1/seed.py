@@ -214,7 +214,7 @@ async def seed_demo_data(db: AsyncSession = Depends(get_db)):
     await db.execute(delete(AuditLog))
     await db.commit()
 
-    # 2. Seed Master Demo Incidents and their authentic Hindsight memories
+    # 2. Seed all Incident records and IncidentEvidence first
     for item in DEMO_INCIDENTS:
         inc = Incident(
             id=item["id"],
@@ -239,22 +239,6 @@ async def seed_demo_data(db: AsyncSession = Depends(get_db)):
             )
             db.add(db_ev)
 
-        # Retain authentic memory for this incident
-        mem = item.get("memory")
-        if mem:
-            await hindsight_service.retain_memory(
-                db=db,
-                incident_id=item["id"],
-                category=item["category"],
-                evidence_summary=mem["evidence_summary"],
-                analyst_decision=mem["analyst_decision"],
-                response_taken=mem["response_taken"],
-                outcome=mem["outcome"],
-                lesson_learned=mem["lesson_learned"],
-                tags=mem["tags"]
-            )
-
-    # 3. Seed Synthetic Attack Scenarios and their memories
     for item in SYNTHETIC_ATTACK_SCENARIOS:
         inc = Incident(
             id=item["id"],
@@ -270,6 +254,10 @@ async def seed_demo_data(db: AsyncSession = Depends(get_db)):
         )
         db.add(inc)
 
+    await db.commit()
+
+    # 3. Retain authentic memories for each incident in Hindsight
+    for item in DEMO_INCIDENTS + SYNTHETIC_ATTACK_SCENARIOS:
         mem = item.get("memory")
         if mem:
             await hindsight_service.retain_memory(

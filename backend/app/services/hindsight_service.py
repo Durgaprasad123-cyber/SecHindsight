@@ -111,7 +111,7 @@ class HindsightService:
                                 "response_taken": response_taken,
                                 "outcome": outcome,
                                 "lesson_learned": lesson_learned,
-                                "tags": tags
+                                "tags": ", ".join(tags) if isinstance(tags, list) else (str(tags) if tags else "")
                             }
                         }
                     ]

@@ -10,22 +10,29 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Groq Configuration
-    GROQ_API_KEY: str = Field(default="", env="GROQ_API_KEY")
-    GROQ_MODEL: str = Field(default="openai/gpt-oss-120b", env="GROQ_MODEL")
+    GROQ_API_KEY: str = Field(default="")
+    GROQ_MODEL: str = Field(default="openai/gpt-oss-120b")
+
+    # Gemini Configuration
+    GEMINI_API_KEY: str = Field(default="")
+    GEMINI_MODEL: str = Field(default="gemini-2.5-flash")
+
+    # AI Provider Selection ("groq" or "gemini")
+    AI_PROVIDER: str = Field(default="groq")
 
     # Hindsight Cloud API Configuration
-    HINDSIGHT_API_KEY: str = Field(default="", env="HINDSIGHT_API_KEY")
-    HINDSIGHT_BASE_URL: str = Field(default="https://api.hindsight.vectorize.io", env="HINDSIGHT_BASE_URL")
-    HINDSIGHT_API_URL: str = Field(default="", env="HINDSIGHT_API_URL")
-    HINDSIGHT_BANK_ID: str = Field(default="sechindsight", env="HINDSIGHT_BANK_ID")
+    HINDSIGHT_API_KEY: str = Field(default="")
+    HINDSIGHT_BASE_URL: str = Field(default="https://api.hindsight.vectorize.io")
+    HINDSIGHT_API_URL: str = Field(default="")
+    HINDSIGHT_BANK_ID: str = Field(default="sechindsight")
 
     # Supabase / PostgreSQL Configuration
-    SUPABASE_URL: str = Field(default="", env="SUPABASE_URL")
-    SUPABASE_SECRET_KEY: str = Field(default="", env="SUPABASE_SECRET_KEY")
-    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="", env="SUPABASE_SERVICE_ROLE_KEY")
-    SUPABASE_PUBLISHABLE_KEY: str = Field(default="", env="SUPABASE_PUBLISHABLE_KEY")
-    SUPABASE_ANON_KEY: str = Field(default="", env="SUPABASE_ANON_KEY")
-    DATABASE_URL: str = Field(default="sqlite+aiosqlite:///./sec_hindsight.db", env="DATABASE_URL")
+    SUPABASE_URL: str = Field(default="")
+    SUPABASE_SECRET_KEY: str = Field(default="")
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(default="")
+    SUPABASE_PUBLISHABLE_KEY: str = Field(default="")
+    SUPABASE_ANON_KEY: str = Field(default="")
+    DATABASE_URL: str = Field(default="sqlite+aiosqlite:///./sec_hindsight.db")
 
     # CORS Origins
     CORS_ORIGINS: Union[str, List[str]] = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001"
@@ -57,6 +64,27 @@ class Settings(BaseSettings):
     def is_groq_configured(self) -> bool:
         return bool(self.GROQ_API_KEY and self.GROQ_API_KEY.strip() != "")
 
+    def is_gemini_configured(self) -> bool:
+        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY.strip() != "")
+
+    def is_provider_configured(self, provider: str = None) -> bool:
+        p = (provider or self.get_active_provider()).lower().strip()
+        if p == "gemini":
+            return self.is_gemini_configured()
+        return self.is_groq_configured()
+
+    def get_active_provider(self) -> str:
+        p = (self.AI_PROVIDER or "groq").lower().strip()
+        if p in ["groq", "gemini"]:
+            return p
+        return "groq"
+
+    def get_active_model(self, provider: str = None) -> str:
+        p = (provider or self.get_active_provider()).lower().strip()
+        if p == "gemini":
+            return self.GEMINI_MODEL or "gemini-2.5-flash"
+        return self.GROQ_MODEL or "openai/gpt-oss-120b"
+
     def is_hindsight_configured(self) -> bool:
         return bool(self.HINDSIGHT_API_KEY and self.HINDSIGHT_API_KEY.strip() != "")
 
@@ -64,3 +92,4 @@ class Settings(BaseSettings):
         return bool(self.SUPABASE_URL and self.SUPABASE_URL.strip() != "" and self.get_effective_supabase_secret() != "")
 
 settings = Settings()
+

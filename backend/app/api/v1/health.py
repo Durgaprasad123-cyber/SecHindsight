@@ -24,7 +24,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         except Exception:
             groq_status = "online"  # Key configured and available
 
-    # 2. Hindsight Cloud Connectivity Check
+    # 2. Gemini Connectivity Check
+    gemini_configured = settings.is_gemini_configured()
+    gemini_status = "online" if gemini_configured else "offline"
+
+    # 3. Hindsight Cloud Connectivity Check
     hindsight_configured = settings.is_hindsight_configured()
     hindsight_status = "offline"
     hindsight_url = settings.get_effective_hindsight_url()
@@ -39,7 +43,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         except Exception:
             hindsight_status = "online"  # Key configured and operational
 
-    # 3. Database & Supabase Connectivity Check
+    # 4. Database & Supabase Connectivity Check
     supabase_configured = settings.is_supabase_configured()
     db_status = "offline"
     url_type = "postgres" if ("postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL or supabase_configured) else "sqlite"
@@ -51,15 +55,28 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     except Exception:
         db_status = "online"
 
+    active_provider = settings.get_active_provider()
+    active_model = settings.get_active_model(active_provider)
+
     return {
         "status": "healthy",
         "system": "SecHindsight Defensive Copilot Backend",
         "version": "1.0.0",
+        "ai_provider": {
+            "active_provider": active_provider,
+            "active_model": active_model,
+            "configured": settings.is_provider_configured(active_provider)
+        },
         "integrations": {
             "groq_llm": {
                 "status": groq_status if groq_configured else "fallback_mode",
                 "model": settings.GROQ_MODEL,
                 "configured": groq_configured
+            },
+            "gemini_llm": {
+                "status": gemini_status if gemini_configured else "fallback_mode",
+                "model": settings.GEMINI_MODEL,
+                "configured": gemini_configured
             },
             "hindsight_memory": {
                 "status": hindsight_status if hindsight_configured else "local_engine_active",
@@ -73,3 +90,4 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             }
         }
     }
+

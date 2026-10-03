@@ -4,11 +4,12 @@ from app.main import app
 
 client = TestClient(app)
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="module")
 def setup_seed():
     """Ensure clean seeded environment before test execution."""
     res = client.post("/api/v1/seed")
     assert res.status_code == 200
+
 
 
 def test_a_inc_1001_memory_integrity():

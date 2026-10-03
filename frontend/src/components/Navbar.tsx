@@ -11,24 +11,30 @@ import {
   RefreshCw,
   Clock,
   UserCheck,
-  CheckCircle2,
-  AlertCircle
+  Cpu,
+  Sparkles
 } from "lucide-react";
 import { fetchHealth, seedDemoData } from "@/lib/api";
+import { HealthData } from "@/lib/types";
 
-export function Navbar() {
-  const [health, setHealth] = useState<any>(null);
+interface NavbarProps {
+  onOpenSearch: () => void;
+  onShowToast: (title: string, desc?: string, type?: "success" | "error" | "info") => void;
+}
+
+export function Navbar({ onOpenSearch, onShowToast }: NavbarProps) {
+  const [health, setHealth] = useState<HealthData | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>("");
 
   useEffect(() => {
     fetchHealth()
       .then(setHealth)
-      .catch(() => setHealth({ status: "offline", hindsight: { bank_id: "sechindsight" } }));
+      .catch(() => setHealth(null));
 
     const updateClock = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentTime(now.toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
     updateClock();
     const interval = setInterval(updateClock, 1000);
@@ -39,91 +45,96 @@ export function Navbar() {
     setIsSeeding(true);
     try {
       await seedDemoData();
+      onShowToast("Demo Reset Successful", "Master 4-Incident scenario and Hindsight memory bank re-seeded.", "success");
       window.location.href = "/demo";
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to seed demo data. Please verify the backend is running.");
+      onShowToast("Demo Seeding Failed", e?.message || "Verify FastAPI backend is running.", "error");
     } finally {
       setIsSeeding(false);
     }
   };
 
-  const bankId = health?.hindsight?.bank_id || "sechindsight";
-  const groqModel = health?.groq?.model || "openai/gpt-oss-120b";
-  const isHealthy = health?.status === "healthy" || health?.database?.status === "online";
+  const bankId = health?.integrations?.hindsight_memory?.bank_id || "sechindsight";
+  const activeProvider = health?.ai_provider?.active_provider || "gemini";
+  const activeModel = health?.ai_provider?.active_model || "gemini-2.5-flash";
+  const isHealthy = health?.status === "healthy" || health?.integrations?.database?.status === "online";
 
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-[rgba(40,50,35,0.10)] bg-white/75 backdrop-blur-xl px-6 py-3">
-      <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 bg-[#1A1A1A]/95 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-6 py-2.5">
+      <div className="max-w-[1700px] mx-auto flex items-center justify-between gap-4">
         
-        {/* Left: Brand & SOC Title */}
+        {/* Left: Brand Identity */}
         <Link href="/" className="flex items-center gap-3 group shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-[#8A9A65] p-0.5 shadow-sm group-hover:bg-[#B7C396] transition-all flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[#0F722A] p-1 shadow-md shadow-[#0F722A]/30 group-hover:bg-[#0B561F] transition-all flex items-center justify-center">
             <ShieldCheck className="w-5 h-5 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-tight text-[#1D211C]">
+              <span className="font-bold text-sm tracking-tight text-white font-mono">
                 SEC HINDSIGHT
               </span>
-              <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-[#E0E7D7] text-[#1D211C] border border-[#B7C396]/40">
-                Enterprise SOC
+              <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded bg-[#0F722A]/20 text-[#10B981] border border-[#0F722A]/40 uppercase">
+                SOC Copilot
               </span>
             </div>
-            <p className="text-[11px] text-[#62685E] flex items-center gap-1 font-medium">
-              Security Operations Center & Memory Layer
+            <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+              Organizational Memory & Defensive AI
             </p>
           </div>
         </Link>
 
-        {/* Center: Search Bar */}
-        <div className="hidden md:flex flex-1 max-w-md mx-4">
-          <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 text-[#62685E] absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search incident ID, user, IP, device..."
-              className="w-full bg-white/80 border border-[rgba(40,50,35,0.12)] rounded-xl pl-9 pr-4 py-1.5 text-xs text-[#1D211C] placeholder-[#62685E]/60 focus:outline-none focus:border-[#8A9A65] shadow-xs"
-            />
+        {/* Center: Global Search Trigger */}
+        <button
+          onClick={onOpenSearch}
+          className="hidden md:flex items-center justify-between flex-1 max-w-md mx-4 bg-[#242424] border border-slate-800 hover:border-[#0F722A]/50 rounded-lg px-3 py-1.5 text-xs text-slate-400 cursor-pointer transition-all shadow-inner group"
+        >
+          <div className="flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-[#10B981] group-hover:text-white transition-colors" />
+            <span className="text-slate-400 group-hover:text-slate-300">Search incident ID, IP, user, host, technique...</span>
           </div>
-        </div>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-[#121212] rounded border border-slate-700">
+            Ctrl K
+          </kbd>
+        </button>
 
-        {/* Right: Health Badges & Live Status Controls */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Right: Operational Status Badges & Demo Controls */}
+        <div className="flex items-center gap-2.5 shrink-0">
           
           {/* Hindsight Bank Status */}
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/60 border border-[rgba(40,50,35,0.10)] text-[11px]">
-            <Brain className="w-3.5 h-3.5 text-[#8A9A65]" />
-            <span className="text-[#62685E]">Hindsight:</span>
-            <span className="font-mono text-[#1D211C] font-semibold">{bankId}</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#242424] border border-slate-800 text-[11px] font-mono">
+            <Brain className="w-3.5 h-3.5 text-[#10B981]" />
+            <span className="text-slate-400">Hindsight:</span>
+            <span className="text-slate-200 font-bold">{bankId}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
           </div>
 
-          {/* Groq Model Badge */}
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/60 border border-[rgba(40,50,35,0.10)] text-[11px]">
-            <span className="text-[#62685E]">Groq:</span>
-            <span className="font-mono text-[#1D211C] font-semibold truncate max-w-[120px]">{groqModel}</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
+          {/* AI Reasoning Provider */}
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#242424] border border-slate-800 text-[11px] font-mono">
+            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+            <span className="text-slate-400">AI:</span>
+            <span className="text-slate-200 font-bold uppercase">{activeProvider}</span>
+            <span className="text-[9px] text-slate-500 font-mono">({activeModel})</span>
           </div>
 
           {/* System API Health Status */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/60 border border-[rgba(40,50,35,0.10)] text-[11px]">
-            <Activity className="w-3.5 h-3.5 text-[#8A9A65]" />
-            <span className="text-[#62685E]">API:</span>
-            <span className={`font-semibold ${isHealthy ? "text-emerald-700" : "text-amber-700"}`}>
-              {isHealthy ? "HEALTHY" : "CONNECTING"}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#242424] border border-slate-800 text-[11px] font-mono">
+            <Activity className="w-3.5 h-3.5 text-blue-400" />
+            <span className="text-slate-400">API:</span>
+            <span className={`font-bold ${isHealthy ? "text-emerald-400" : "text-amber-400"}`}>
+              {isHealthy ? "HEALTHY" : "OFFLINE"}
             </span>
           </div>
 
           {/* Analyst Indicator */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#E0E7D7]/70 text-[11px] text-[#1D211C] font-semibold border border-[#B7C396]/40">
-            <UserCheck className="w-3.5 h-3.5 text-[#8A9A65]" />
+          <div className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0F722A]/15 border border-[#0F722A]/30 text-[11px] font-mono text-slate-200 font-semibold">
+            <UserCheck className="w-3.5 h-3.5 text-[#10B981]" />
             <span>SOC Lead Analyst</span>
           </div>
 
-          {/* Clock */}
-          <div className="hidden lg:flex items-center gap-1 font-mono text-[11px] text-[#62685E] px-2 py-1 bg-white/50 rounded-lg border border-[rgba(40,50,35,0.08)]">
-            <Clock className="w-3 h-3 text-[#8A9A65]" />
+          {/* Time Clock */}
+          <div className="hidden md:flex items-center gap-1 font-mono text-[11px] text-slate-400 px-2.5 py-1 bg-[#242424] rounded border border-slate-800">
+            <Clock className="w-3 h-3 text-[#10B981]" />
             <span>{currentTime || "UTC"}</span>
           </div>
 
@@ -131,7 +142,7 @@ export function Navbar() {
           <button
             onClick={handleSeedDemo}
             disabled={isSeeding}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#8A9A65] text-white font-semibold text-xs shadow-xs hover:bg-[#788855] transition-all cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#0F722A] hover:bg-[#0B561F] text-white font-mono font-bold text-xs shadow-md shadow-[#0F722A]/20 transition-all cursor-pointer disabled:opacity-50 shrink-0 border border-[#0F722A]"
           >
             {isSeeding ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />

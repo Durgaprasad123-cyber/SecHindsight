@@ -1,21 +1,23 @@
 import time
 import logging
 from typing import Dict, Any
-from app.services.groq_service import groq_service
+from app.services.ai_service import ai_service
 
 logger = logging.getLogger("sec_hindsight.agent.triage")
 
 class TriageAgent:
     """
     Triage Agent: Initial classification, severity scoring, confidence estimation,
-    and structured indicator extraction for incoming alerts.
+    and structured indicator extraction for incoming alerts via AI Service.
     """
     async def run(self, incident_title: str, description: str, category_hint: str = "") -> Dict[str, Any]:
         start_time = time.time()
 
         system_prompt = (
             "You are an expert Cybersecurity Triage AI Agent in a SOC copilot system. "
-            "Analyze the given security alert/incident and produce a structured JSON triage report."
+            "Analyze the given security alert/incident and produce a structured JSON triage report. "
+            "IMPORTANT: Never state 'This proves an attack'. Use cautious security analysis language such as "
+            "'Evidence is consistent with...', 'Possible threat context...', 'Requires further investigation...'."
         )
 
         user_prompt = f"""
@@ -35,7 +37,7 @@ Provide a JSON object with the following schema:
 }}
 """
 
-        # Deterministic fallback response in case Groq is unavailable
+        # Deterministic fallback response in case AI service is unavailable
         fallback_category = category_hint or "credential_compromise"
         desc_lower = description.lower()
         
@@ -56,7 +58,7 @@ Provide a JSON object with the following schema:
             "initial_assessment": f"Triage complete for '{incident_title}'. Priority assigned: {severity.upper()}."
         }
 
-        output = await groq_service.generate_json(
+        output = await ai_service.generate_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             fallback_response=fallback

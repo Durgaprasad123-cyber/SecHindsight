@@ -22,7 +22,9 @@ class GroqService:
         user_prompt: str,
         fallback_response: Dict[str, Any],
         temperature: float = 0.2,
+        model: Optional[str] = None,
     ) -> Dict[str, Any]:
+
         """
         Calls Groq API requesting JSON output.
         Logs errors cleanly without exposing secrets.
